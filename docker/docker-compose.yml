@@ -1,0 +1,29 @@
+version: "2.3"
+services:
+  zookeeper:
+    image: zookeeper:3.5
+    container_name: zookeeper
+    ports:
+      - "2181:2181"
+  hbase-master:
+    image: hbase-master:latest
+    container_name: hbase-master
+    hostname: hbase-master
+    # 【关键】绕过原镜像的检查脚本，直接使用 bash
+    entrypoint: /bin/bash
+    environment:
+      - HBASE_MANAGES_ZK=false
+      - HBASE_DB_ROOTDIR=hdfs://hbase-master:8020/hbase
+    ports:
+      - "16010:16010"
+      - "9090:9090"
+    links:
+      - zookeeper
+    mem_limit: 4g
+    # 先启动 HBase 主程序，再启动 Thrift 接口（让它在前台运行，保持容器不退）
+    command: >
+      -c "
+      /hbase/bin/start-hbase.sh &&
+      echo 'HBase started, starting Thrift...' &&
+      /hbase/bin/hbase thrift start -p 9090 --infoport 9095
+      "
