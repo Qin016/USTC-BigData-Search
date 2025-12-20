@@ -1,0 +1,5 @@
+- name: "cs"
+  url: "https://cs.ustc.edu.cn/"  # 去掉了 main.htm
+
+- name: "sgy"
+  url: "https://sgy.ustc.edu.cn/" # 去掉了 main.htm
