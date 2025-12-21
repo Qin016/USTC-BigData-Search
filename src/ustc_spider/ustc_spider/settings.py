@@ -66,9 +66,20 @@ HBASE_TABLE = 'ustc_web_data'
 # 只显示 INFO 及以上级别的日志，减少控制台刷屏
 LOG_LEVEL = 'INFO'
 
-# 8. 深度 & 去重 & 礼貌 —— 防止全站无限爬
-DEPTH_LIMIT = 2                        # 最大递归深度（0=无限制）
 DUPEFILTER_CLASS = 'scrapy.dupefilters.RFPDupeFilter'  # 启用框架去重
-CONCURRENT_REQUESTS = 8                # 降并发，更礼貌
-DOWNLOAD_DELAY = 1.0                   # 比 0.5 更稳
-AUTOTHROTTLE_ENABLED = True            # 自适应限速（可选）
+# ---------- 深度 2 层上限 ----------
+DEPTH_LIMIT = 2
+
+# ---------- 并发与速度 ----------
+CONCURRENT_REQUESTS = 500
+CONCURRENT_REQUESTS_PER_DOMAIN = 8
+DOWNLOAD_DELAY = 0.2
+AUTOTHROTTLE_ENABLED = True
+
+# ---------- 禁止空闲早停 ----------
+CLOSESPIDER_IDLE_NO_ITEMS = 0
+CLOSESPIDER_TIMEOUT = 0
+
+# ---------- 队列防内存爆炸 ----------
+SCHEDULER_DISK_QUEUE = 'scrapy.squeues.PickleFifoDiskQueue'
+SCHEDULER_MEMORY_QUEUE = 'scrapy.squeues.LifoMemoryQueue'
