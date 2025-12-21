@@ -3,92 +3,98 @@ from scrapy.spiders import CrawlSpider, Rule
 from scrapy.linkextractors import LinkExtractor
 import yaml
 import os
-import re
 from urllib.parse import urlparse
 from ustc_spider.items import GeneralSpiderItem
 
 class UniversalSpider(CrawlSpider):
     name = 'universal_spider'
     
-    # --- 改进点 1: 更智能的规则 ---
-    # Scrapy 是从上到下匹配规则的。
+    # 定义通用规则：只要在允许的域名内，就提取所有链接继续爬取
     rules = (
-        # 规则A：优先追踪看起来像“分页”或“列表”的链接 (包含 list, page, index_ 等关键词)
-        Rule(LinkExtractor(allow=(r'list', r'page', r'index_\d+', r'view'), 
-                           deny=(r'login', r'logout', r'javascript')), 
-             callback='parse_item', follow=True),
-             
-        # 规则B：兜底规则，追踪域名下的其他链接，确保不漏掉详情页
-        # 注意：对于全站爬取，这就足够覆盖“所有页面”了
-        Rule(LinkExtractor(allow=(), deny=(r'login', r'\.jpg', r'\.png')), 
-             callback='parse_item', follow=True),
+        Rule(LinkExtractor(allow=()), callback='parse_item', follow=True),
     )
 
     def __init__(self, *args, **kwargs):
         super(UniversalSpider, self).__init__(*args, **kwargs)
+        
+        # 1. 初始化配置列表 (修复 AttributeError 的关键)
         self.project_configs = []
         self.start_urls = []
         self.allowed_domains = []
-        
-        # 加载配置 (逻辑保持不变，为了节省篇幅略去部分打印)
-        file_path = os.path.join(os.getcwd(), 'sites.yaml')
+
+        # 2. 读取配置文件
         try:
+            # 假设 sites.yaml 在项目根目录
+            file_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'sites.yaml')
+            print(f"========== [INIT] Reading config from: {file_path} ==========")
+            
             with open(file_path, 'r', encoding='utf-8') as f:
                 self.project_configs = yaml.safe_load(f)
-                if self.project_configs:
-                    for site in self.project_configs:
-                        url = site['url']
-                        self.start_urls.append(url)
-                        domain = urlparse(url).netloc
-                        self.allowed_domains.append(domain)
+                
+                if not self.project_configs:
+                    print("========== [ERROR] sites.yaml is empty! ==========")
+                    return
+
+                for site in self.project_configs:
+                    url = site['url']
+                    self.start_urls.append(url)
+                    
+                    # 提取域名加入 allowed_domains
+                    # 例如 https://cs.ustc.edu.cn/ -> cs.ustc.edu.cn
+                    domain = urlparse(url).netloc
+                    self.allowed_domains.append(domain)
+                    print(f"========== [INIT] Added Seed: {url} | Domain: {domain} ==========")
+                    
+        except FileNotFoundError:
+            print(f"========== [FATAL] sites.yaml not found at {file_path} ==========")
         except Exception as e:
-            print(f"Error loading config: {e}")
+            print(f"========== [FATAL] Error loading config: {e} ==========")
 
     def parse_item(self, response):
-        # 1. 识别项目归属
+        # 1. 确定当前页面属于哪个学院 (Project)
         project_name = 'unknown'
         current_domain = urlparse(response.url).netloc
+        
         for config in self.project_configs:
-            if urlparse(config['url']).netloc in current_domain:
+            # 如果配置里的域名出现在当前 URL 的域名中
+            config_domain = urlparse(config['url']).netloc
+            if config_domain in current_domain:
                 project_name = config['name']
                 break
         
-        # --- 改进点 2: 尝试从 URL 中识别页码，打印进度 ---
-        # 很多网站 URL 类似 list_10.htm 或 ?page=10
-        page_match = re.search(r'[_\?](?:page|p|index)[=_](\d+)', response.url)
-        page_info = f" [Page: {page_match.group(1)}]" if page_match else ""
-
+        # 2. 提取基础信息
         item = GeneralSpiderItem()
         item['url'] = response.url
         item['project'] = project_name
+        
+        # 提取标题 (优先取 title 标签，取不到就为空)
         item['title'] = response.xpath('//title/text()').get(default='').strip()
         
-        # 提取正文
+        # 3. 提取正文 (简单的清洗逻辑)
+        # 提取所有 p 标签和 div 标签的文本，去除空白
         text_nodes = response.xpath('//body//text()').getall()
-        # 简单清洗：去除过多换行
-        item['parsed_text'] = ''.join([t.strip() for t in text_nodes if t.strip()])[:50000]
-        item['html_content'] = "" # 占位
+        clean_text = ''.join([t.strip() for t in text_nodes if t.strip()])
+        item['parsed_text'] = clean_text[:50000] # 限制长度防止溢出
+        
+        # 保存原始 HTML (用于后续容错)
+        # item['html_content'] = response.text 
+        # 考虑到 HBase 存储压力，暂不存原始 HTML，如果需要可取消注释
+        item['html_content'] = "" 
 
-        # --- 改进点 3: 提取文件并准备下载 ---
+        # 4. 提取附件链接
+        # 寻找所有 href 结尾是 pdf/doc/docx/xls/xlsx 的链接
         file_urls = []
-        # 扩展了文件后缀支持
-        extensions = ('.pdf', '.doc', '.docx', '.xls', '.xlsx', '.zip', '.rar', '.7z', '.ppt', '.pptx')
-        
-        # 既查 a 标签的 href，也可以查 iframe 的 src (部分老网站)
-        links = response.css('a::attr(href), iframe::attr(src)').getall()
-        
+        links = response.css('a::attr(href)').getall()
         for link in links:
-            # 清洗链接，去除空白
-            link = link.strip()
             lower_link = link.lower()
-            if lower_link.endswith(extensions):
+            if lower_link.endswith(('.pdf', '.doc', '.docx', '.xls', '.xlsx', '.zip')):
+                # 将相对链接转换为绝对链接
                 abs_url = response.urljoin(link)
                 file_urls.append(abs_url)
         
-        # 将去重后的 URL 列表传给 item
-        item['file_urls'] = list(set(file_urls))
+        item['file_urls'] = file_urls
         
-        # 仅当有效时才 yield
-        if item['title']:
-            print(f"[{project_name}]{page_info} Crawled: {item['title'][:30]}... | Files found: {len(item['file_urls'])}")
+        # 5. 只有当有内容或者有文件时才 yield
+        if item['title'] or item['file_urls']:
+            print(f"[Scraper] Found: {item['title']} - Files: {len(file_urls)}")
             yield item
