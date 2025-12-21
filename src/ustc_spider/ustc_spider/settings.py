@@ -65,3 +65,10 @@ HBASE_TABLE = 'ustc_web_data'
 # --- 7. 日志配置 (可选) ---
 # 只显示 INFO 及以上级别的日志，减少控制台刷屏
 LOG_LEVEL = 'INFO'
+
+# 8. 深度 & 去重 & 礼貌 —— 防止全站无限爬
+DEPTH_LIMIT = 2                        # 最大递归深度（0=无限制）
+DUPEFILTER_CLASS = 'scrapy.dupefilters.RFPDupeFilter'  # 启用框架去重
+CONCURRENT_REQUESTS = 8                # 降并发，更礼貌
+DOWNLOAD_DELAY = 1.0                   # 比 0.5 更稳
+AUTOTHROTTLE_ENABLED = True            # 自适应限速（可选）
