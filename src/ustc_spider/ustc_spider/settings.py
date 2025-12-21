@@ -1,46 +1,67 @@
+# settings.py
 import os
 
-# --- 基础设置 ---
+# --- 1. 基础项目信息 ---
 BOT_NAME = 'ustc_spider'
 
 SPIDER_MODULES = ['ustc_spider.spiders']
 NEWSPIDER_MODULE = 'ustc_spider.spiders'
 
-# 伪装成浏览器 (必须有)
+# --- 2. 伪装与反爬策略 ---
+# 伪装成 Chrome 浏览器
 USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 
-# 不遵守 robots.txt (防止被拒绝访问)
+# 不遵守 robots.txt (必须 False，否则很多校内网爬不到)
 ROBOTSTXT_OBEY = False
 
-# --- 并发与延迟 ---
-CONCURRENT_REQUESTS = 16
-DOWNLOAD_DELAY = 1  # 每次请求等待1秒，防止被封IP
+# 禁用 Cookies (防止被服务器识别会话，同时节省内存)
+COOKIES_ENABLED = False
 
-# --- 核心：Pipeline 配置 ---
+# --- 3. 并发与速度控制 ---
+# 全站爬取数据量大，适当开启并发
+CONCURRENT_REQUESTS = 16
+
+# 下载延迟 (秒): 0.5秒既能保证速度，又不至于太快把对方服务器打挂
+# 如果遇到封禁，请将此值调大至 1 或 2
+DOWNLOAD_DELAY = 0.5
+
+# 下载超时 (秒): 防止卡在某些加载不出来的页面
+DOWNLOAD_TIMEOUT = 15
+
+# --- 4. 核心：数据流管道配置 (Pipelines) ---
+# 数字越小，优先级越高，越先执行。
 ITEM_PIPELINES = {
-   # 数字越小越先执行。
-   # 1. 先执行下载附件的 Pipeline
-   'ustc_spider.pipelines.MyFilesPipeline': 1, 
-   # 2. 下载完后，执行写入 HBase 的 Pipeline
+   # 阶段一：文件下载 (优先级 1 - 最高)
+   # 必须最先执行，确保文件下载完成后，才把本地路径传给后续步骤
+   'ustc_spider.pipelines.MyFilesPipeline': 1,
+   
+   # 阶段二：数据处理与入库 (优先级 300)
+   # 在这里进行 Jieba 分词和写入 HBase
    'ustc_spider.pipelines.HBasePipeline': 300,
 }
 
-# --- 核心：文件下载设置 ---
-# 1. 字段映射 (告诉 Scrapy 哪个字段是链接，下载结果存哪个字段)
+# --- 5. 文件下载专用配置 ---
+# 告诉 Scrapy Item 中哪个字段是“文件下载链接”
 FILES_URLS_FIELD = 'file_urls'
+# 告诉 Scrapy 下载结果（本地路径）填回哪个字段
 FILES_RESULT_FIELD = 'files'
 
-# 2. 文件过期时间 (90天内不重复下载同一个文件)
-FILES_EXPIRES = 90
-
-# 3. 允许重定向 (关键！很多下载链接是 302 跳转)
-MEDIA_ALLOW_REDIRECTS = True
-
-# 4. 存储路径 (使用绝对路径，确保你能找到！)
-# 路径指向: /home/qin/USTC-BigData-Search/src/ustc_spider/downloads
+# 文件存储绝对路径 (根据你的环境设置)
+# 确保此文件夹有写权限，如果没有，代码会自动尝试创建
 FILES_STORE = '/home/qin/USTC-BigData-Search/src/ustc_spider/downloads'
 
-# --- HBase 配置 (供 Pipeline 使用) ---
-HBASE_HOST = 'localhost'
-HBASE_PORT = 9090
+# 文件过期时间：90天内抓到相同的 URL 不会重新下载
+FILES_EXPIRES = 90
+
+# 允许 302 重定向 (非常重要！很多下载链接通过中间页跳转)
+MEDIA_ALLOW_REDIRECTS = True
+
+# --- 6. HBase 数据库配置 ---
+# 对应启动命令: hbase thrift start -p 9090 -f -c
+HBASE_HOST = '127.0.0.1'  # 建议使用 IP
+HBASE_PORT = 9090         # Thrift 端口
 HBASE_TABLE = 'ustc_web_data'
+
+# --- 7. 日志配置 (可选) ---
+# 只显示 INFO 及以上级别的日志，减少控制台刷屏
+LOG_LEVEL = 'INFO'
