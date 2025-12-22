@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>中科大校内文件搜索 (RAG)</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; background-color: #f5f5f5; }
+        .container { background-color: white; padding: 40px; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        h1 { text-align: center; color: #004182; margin-bottom: 30px; } /* USTC Blue */
+        
+        .search-box { display: flex; gap: 10px; margin-bottom: 30px; }
+        input[type="text"] { flex: 1; padding: 15px; border: 2px solid #ddd; border-radius: 8px; font-size: 16px; transition: border-color 0.3s; }
+        input[type="text"]:focus { border-color: #004182; outline: none; }
+        button { padding: 15px 30px; background-color: #004182; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: bold; transition: background-color 0.3s; }
+        button:hover { background-color: #003366; }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
+        
+        .result-section { margin-top: 30px; display: none; }
+        
+        .ai-answer-container { background-color: #eef6fc; padding: 25px; border-radius: 10px; border-left: 6px solid #004182; margin-bottom: 30px; }
+        .ai-answer-container h3 { margin-top: 0; color: #004182; display: flex; align-items: center; gap: 10px; }
+        #aiContent { line-height: 1.8; color: #333; font-size: 16px; white-space: pre-wrap; }
+        
+        .doc-list-container h3 { color: #333; border-bottom: 2px solid #eee; padding-bottom: 10px; }
+        .doc-list { list-style: none; padding: 0; }
+        .doc-item { background: #fff; border: 1px solid #eee; border-radius: 8px; padding: 20px; margin-bottom: 15px; transition: transform 0.2s, box-shadow 0.2s; }
+        .doc-item:hover { transform: translateY(-2px); box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+        .doc-title { font-size: 18px; font-weight: bold; color: #004182; text-decoration: none; display: block; margin-bottom: 8px; }
+        .doc-title:hover { text-decoration: underline; }
+        .doc-meta { font-size: 13px; color: #888; margin-bottom: 10px; display: flex; gap: 15px; }
+        .doc-keywords { font-size: 13px; color: #0066cc; margin-bottom: 10px; }
+        .doc-files { margin-top: 10px; padding: 10px; background: #f9f9f9; border-radius: 6px; border: 1px solid #eee; }
+        .file-item { display: flex; align-items: center; gap: 10px; margin-bottom: 5px; font-size: 14px; }
+        .file-item:last-child { margin-bottom: 0; }
+        .file-name { flex: 1; color: #555; font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .btn-action { text-decoration: none; padding: 2px 8px; border-radius: 4px; font-size: 12px; transition: background 0.2s; }
+        .btn-preview { background-color: #e3f2fd; color: #004182; }
+        .btn-preview:hover { background-color: #bbdefb; }
+        .btn-download { background-color: #f5f5f5; color: #333; }
+        .btn-download:hover { background-color: #e0e0e0; }
+        .doc-summary { font-size: 14px; color: #555; line-height: 1.6; margin-top: 10px; }
+        
+        .loading { text-align: center; color: #666; display: none; margin: 20px 0; }
+        .spinner { display: inline-block; width: 20px; height: 20px; border: 3px solid rgba(0,65,130,0.3); border-radius: 50%; border-top-color: #004182; animation: spin 1s ease-in-out infinite; margin-right: 10px; vertical-align: middle; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 USTC 校内文件搜索与问答</h1>
+        <div class="search-box">
+            <input type="text" id="query" placeholder="请输入关键词，例如：奖学金申请、教务处通知..." onkeydown="if(event.keyCode==13) search()">
+            <button onclick="search()" id="searchBtn">搜索</button>
+        </div>
+
+        <div id="loading" class="loading">
+            <div class="spinner"></div> 正在检索并生成回答...
+        </div>
+
+        <div id="resultSection" class="result-section">
+            <div class="ai-answer-container">
+                <h3>🤖 中科大助手回答</h3>
+                <div id="aiContent"></div>
+            </div>
+
+            <div class="doc-list-container">
+                <h3>📚 参考资料</h3>
+                <ul id="docList" class="doc-list"></ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 使用 Markdown 解析库 (可选，这里简单处理换行)
+        // 如果需要更好的 Markdown 支持，可以引入 marked.js
+        
+        function search() {
+            const query = document.getElementById('query').value.trim();
+            if (!query) return;
+
+            const resultSection = document.getElementById('resultSection');
+            const aiContent = document.getElementById('aiContent');
+            const docList = document.getElementById('docList');
+            const loading = document.getElementById('loading');
+            const searchBtn = document.getElementById('searchBtn');
+
+            // Reset UI
+            resultSection.style.display = 'none';
+            aiContent.innerHTML = '';
+            docList.innerHTML = '';
+            loading.style.display = 'block';
+            searchBtn.disabled = true;
+
+            // Start SSE connection
+            const eventSource = new EventSource(`/api/search?q=${encodeURIComponent(query)}`);
+
+            eventSource.addEventListener('results', function(e) {
+                loading.style.display = 'none';
+                resultSection.style.display = 'block';
+                
+                const results = JSON.parse(e.data);
+                if (results.length === 0) {
+                    docList.innerHTML = '<li class="doc-item">未找到相关文档</li>';
+                } else {
+                    results.forEach(doc => {
+                        const li = document.createElement('li');
+                        li.className = 'doc-item';
+                        
+                        let filesHtml = '';
+                        if (doc.file_paths && doc.file_paths.length > 0) {
+                            const fileItems = doc.file_paths.map(f => {
+                                const fileName = f.split('/').pop();
+                                const isPdf = fileName.toLowerCase().endsWith('.pdf');
+                                const isImg = /\.(jpg|jpeg|png|gif)$/i.test(fileName);
+                                const canPreview = isPdf || isImg;
+                                
+                                let actions = '';
+                                if (canPreview) {
+                                    actions += `<a href="/file/${f}" target="_blank" class="btn-action btn-preview">👁️ 预览</a>`;
+                                }
+                                actions += `<a href="/download/${f}" class="btn-action btn-download">⬇️ 下载</a>`;
+
+                                return `
+                                    <div class="file-item">
+                                        <span class="file-name">📄 ${fileName}</span>
+                                        ${actions}
+                                    </div>
+                                `;
+                            }).join('');
+                            
+                            filesHtml = `<div class="doc-files"><strong>附件：</strong>${fileItems}</div>`;
+                        }
+
+                        li.innerHTML = `
+                            <a href="${doc.url}" target="_blank" class="doc-title">${doc.title}</a>
+                            <div class="doc-meta">
+                                <span>🔥 相关度: ${doc.score}</span>
+                                <span>🔗 URL: ${doc.url}</span>
+                            </div>
+                            <div class="doc-keywords">
+                                🏷️ 关键词: ${doc.keywords && doc.keywords.length > 0 ? doc.keywords.slice(0, 5).join(', ') : '无'}
+                            </div>
+                            <div class="doc-summary">${doc.summary}</div>
+                            ${filesHtml}
+                        `;
+                        docList.appendChild(li);
+                    });
+                }
+            });
+
+            eventSource.addEventListener('token', function(e) {
+                // Append token to AI answer
+                const token = JSON.parse(e.data);
+                // 简单的流式追加，实际项目中可能需要处理 Markdown 渲染
+                aiContent.textContent += token; 
+            });
+
+            eventSource.addEventListener('done', function(e) {
+                eventSource.close();
+                searchBtn.disabled = false;
+            });
+
+            eventSource.onerror = function(e) {
+                console.error("EventSource failed:", e);
+                eventSource.close();
+                loading.style.display = 'none';
+                searchBtn.disabled = false;
+                if (aiContent.innerHTML === '') {
+                    aiContent.innerHTML = '❌ 发生错误，请检查后端服务是否正常运行。';
+                    resultSection.style.display = 'block';
+                }
+            };
+        }
+    </script>
+</body>
+</html>

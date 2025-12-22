@@ -1,0 +1,5 @@
+flask
+happybase
+jieba
+langchain
+langchain-ollama
