@@ -17,10 +17,10 @@ class RAGService:
         self.search_engine = USTCSearchEngine()
         
         # 定义 Prompt 模板
-        # 要求模型作为“中科大助手”，仅根据参考资料回答
+        # 要求模型作为“中科大文件搜索助手”，仅根据参考资料回答
         self.prompt_template = ChatPromptTemplate.from_template("""
-你是一个智能助手“中科大助手”，专门回答关于中国科学技术大学（USTC）的问题。
-请严格基于以下提供的参考资料（Context）回答用户的问题。
+你是一个智能助手“中科大文件搜索助手”，专门帮助用户查找和理解中国科学技术大学（USTC）的相关文件和资料。
+请严格基于以下提供的参考资料（Context）回答用户的问题。这些资料来源于学校网站的附件文档或包含附件的网页。
 如果参考资料中没有相关信息，请礼貌地告知用户你无法从当前资料中找到答案，不要编造信息。
 
 参考资料：
@@ -43,7 +43,7 @@ class RAGService:
         """
         # 1. 检索相关文档
         logging.info(f"Searching for: {query}")
-        search_results = self.search_engine.search(query, top_k=5)
+        search_results = self.search_engine.search(query, top_k=10)
         
         # 2. 构建 Context
         if not search_results:
@@ -51,11 +51,17 @@ class RAGService:
         else:
             context_parts = []
             for i, res in enumerate(search_results):
-                # 限制每个文档的内容长度，防止超出 Context Window
-                # 假设 qwen2.5:7b 支持较长上下文，但为了性能保留前 800 字符
-                content_snippet = res['content'][:800].replace('\n', ' ')
-                keywords_str = ", ".join(res.get('keywords', []))
-                context_parts.append(f"【文档 {i+1}】\n标题: {res['title']}\n关键词: {keywords_str}\nURL: {res['url']}\n内容: {content_snippet}")
+                # 使用 snippet 作为上下文内容
+                content_snippet = res.get('snippet', '')
+                
+                # 构建来源信息
+                if res.get('type') == 'file':
+                    source_info = f"类型: 文档 | 来源页面: {res.get('parent_url', '未知')}"
+                else:
+                    files_count = len(res.get('file_paths', []))
+                    source_info = f"类型: 网页 (含 {files_count} 个附件) | URL: {res['url']}"
+                
+                context_parts.append(f"【资料 {i+1}】\n标题: {res['title']}\n{source_info}\n内容摘要: {content_snippet}")
             context = "\n\n".join(context_parts)
             
         logging.info("Context constructed. Generating answer...")

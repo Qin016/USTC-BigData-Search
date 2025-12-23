@@ -27,6 +27,14 @@ def download_file(filename):
     """强制下载文件"""
     return send_from_directory(DOWNLOAD_FOLDER, filename, as_attachment=True)
 
+@app.route('/preview')
+def preview_file():
+    """预览文件接口"""
+    file_path = request.args.get('path')
+    if not file_path:
+        return "File path is required", 400
+    return send_from_directory(DOWNLOAD_FOLDER, file_path)
+
 @app.route('/api/search', methods=['GET'])
 def search():
     """
@@ -40,38 +48,43 @@ def search():
         # 获取流式生成器和搜索结果
         stream_gen, results = rag_service.get_answer_stream(query)
         
-        # 准备搜索结果数据 (去掉全文 content 以减小传输量)
+        # 准备搜索结果数据
         simple_results = []
         for res in results:
             simple_results.append({
                 'title': res['title'],
                 'url': res['url'],
-                'keywords': res.get('keywords', []),
-                'file_paths': res.get('file_paths', []),
-                'summary': res['summary'],
-                'score': res['score']
+                'snippet': res['snippet'],
+                'score': res['score'],
+                'type': res.get('type', 'web'),
+                'parent_url': res.get('parent_url', ''),
+                'file_paths': res.get('file_paths', [])
             })
 
         def generate():
-            # 1. 首先发送搜索结果元数据
-            # event: results
-            yield f"event: results\ndata: {json.dumps(simple_results, ensure_ascii=False)}\n\n"
-            
-            # 2. 发送 AI 回答的流式 Token
-            # event: token
-            for chunk in stream_gen:
-                if chunk:
-                    # 使用 json.dumps 确保特殊字符被正确转义
-                    yield f"event: token\ndata: {json.dumps(chunk, ensure_ascii=False)}\n\n"
-            
-            # 3. 结束信号
-            yield "event: done\ndata: [DONE]\n\n"
+            try:
+                # 1. 首先发送搜索结果元数据
+                # event: results
+                yield f"event: results\ndata: {json.dumps(simple_results, ensure_ascii=False)}\n\n"
+                
+                # 2. 发送 AI 回答的流式 Token
+                # event: token
+                for chunk in stream_gen:
+                    if chunk:
+                        # 使用 json.dumps 确保特殊字符被正确转义
+                        yield f"event: token\ndata: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+                
+                # 3. 结束信号
+                yield "event: done\ndata: [DONE]\n\n"
+            except Exception as e:
+                logging.error(f"Stream generation error: {e}")
+                yield f"event: error\ndata: {json.dumps(str(e), ensure_ascii=False)}\n\n"
 
         return Response(stream_with_context(generate()), mimetype='text/event-stream')
 
     except Exception as e:
-        logging.error(f"Search error: {e}")
-        return jsonify({'error': str(e)}), 500
+        logging.error(f"Search error: {repr(e)}")
+        return jsonify({'error': str(e) if isinstance(e, str) else repr(e)}), 500
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
