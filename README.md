@@ -1,7 +1,7 @@
 # USTC-BigData-Search
 ## 项目文件树
+```
 USTC-BigData-Search/
-├── data/               # 存放临时下载的文件、本地向量库索引
 ├── src/                # 源代码
 │   ├── etl/            # 数据清洗与入库代码
 │   │   ├── build_inverted_index.py    # 构建倒排索引
@@ -17,3 +17,4 @@ USTC-BigData-Search/
 │       ├── sites.yaml                 # 爬取站点配置
 │       └── ustc_spider/               # 爬虫核心代码
 └── README.md           # 项目说明
+```
