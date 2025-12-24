@@ -48,7 +48,7 @@ FILES_RESULT_FIELD = 'files'
 
 # 文件存储绝对路径 (根据你的环境设置)
 # 确保此文件夹有写权限，如果没有，代码会自动尝试创建
-FILES_STORE = '/home/qin/USTC-BigData-Search/src/ustc_spider/downloads'
+FILES_STORE = '/home/plx/USTC-BigData-Search/src/ustc_spider/downloads'
 
 # 文件过期时间：90天内抓到相同的 URL 不会重新下载
 FILES_EXPIRES = 90
@@ -71,7 +71,7 @@ DUPEFILTER_CLASS = 'scrapy.dupefilters.RFPDupeFilter'  # 启用框架去重
 DEPTH_LIMIT = 2
 
 # ---------- 并发与速度 ----------
-CONCURRENT_REQUESTS = 500
+CONCURRENT_REQUESTS = 100
 CONCURRENT_REQUESTS_PER_DOMAIN = 8
 DOWNLOAD_DELAY = 0.2
 AUTOTHROTTLE_ENABLED = True

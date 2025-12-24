@@ -52,13 +52,15 @@ def search():
         simple_results = []
         for res in results:
             simple_results.append({
+                'doc_id': res.get('doc_id'),
                 'title': res['title'],
                 'url': res['url'],
                 'snippet': res['snippet'],
                 'score': res['score'],
                 'type': res.get('type', 'web'),
                 'parent_url': res.get('parent_url', ''),
-                'file_paths': res.get('file_paths', [])
+                'file_paths': res.get('file_paths', []),
+                'date': res.get('date')
             })
 
         def generate():

@@ -202,10 +202,10 @@ class USTCSearchEngine:
             file_boost = 1.5 if has_files else 1.0
             
             # 3. 时间衰减 (Time Decay)
-            time_decay = self.get_time_decay(row.get(b'info:date', b''))
+            #time_decay = self.get_time_decay(row.get(b'info:date', b''))
             
             # Final Score Formula
-            final_score = base_score * file_boost * time_decay
+            final_score = base_score * file_boost #* time_decay
             
             # 字段处理
             title = row.get(b'info:title', '无标题'.encode('utf-8')).decode('utf-8', 'ignore')

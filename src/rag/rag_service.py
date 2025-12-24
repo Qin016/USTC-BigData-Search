@@ -43,14 +43,16 @@ class RAGService:
         """
         # 1. 检索相关文档
         logging.info(f"Searching for: {query}")
-        search_results = self.search_engine.search(query, top_k=10)
+        # 拉取全部候选供前端分页，LLM 只取前 10 条作为上下文
+        search_results = self.search_engine.search(query, top_k=None)
+        context_results = search_results[:10]
         
         # 2. 构建 Context
-        if not search_results:
+        if not context_results:
             context = "没有找到相关参考资料。"
         else:
             context_parts = []
-            for i, res in enumerate(search_results):
+            for i, res in enumerate(context_results):
                 # 使用 snippet 作为上下文内容
                 content_snippet = res.get('snippet', '')
                 

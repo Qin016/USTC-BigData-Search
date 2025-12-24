@@ -1,0 +1,9 @@
+# Python 缓存
+**/__pycache__/
+*.pyc
+
+# Scrapy 下载目录
+/src/ustc_spider/downloads/
+
+# 虚拟环境
+/venv/
