@@ -12,10 +12,8 @@
 - **Web 展示**: Flask 前端展示搜索结果和流式 AI 回答
 
 ## 项目文件树
-
 ```
 USTC-BigData-Search/
-├── data/               # 存放临时下载的文件、本地向量库索引
 ├── src/                # 源代码
 │   ├── etl/            # 数据清洗与入库代码
 │   │   ├── build_inverted_index.py    # 构建倒排索引
